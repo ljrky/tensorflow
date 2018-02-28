@@ -1,4 +1,5 @@
 """"
+利用深度学习模型和 500 支成分股价拟合 S&P 500 指数
 download dataset from https://github.com/sebastianheinz/stockprediction
 put into datasets folder
 """
@@ -23,6 +24,10 @@ p = data.shape[1]
 # Make data a np.array
 data = data.values
 
+''''
+该数据集需要被分割为训练和测试数据，训练数据包含总数据集 80% 的记录。该数据集并不需要扰乱而只需要序列地进行切片。
+训练数据可以从 2017 年 4 月选取到2017 年 7 月底，而测试数据再选取剩下到 2017 年 8 月的数据。
+'''
 # Training and test data
 train_start = 0
 train_end = int(np.floor(0.8*n))
@@ -31,12 +36,24 @@ test_end = n
 data_train = data[np.arange(train_start, train_end), :]
 data_test = data[np.arange(test_start, test_end), :]
 
+''''
+数据标准化
+大多数神经网络架构都需要标准化数据，因为 tanh 和 sigmoid 等大多数神经元的激活函数都定义在 [-1, 1] 或 [0, 1] 区间内。
+目前线性修正单元 ReLU 激活函数是最常用的，但它的值域有下界无上界。
+不过无论如何我们都应该重新缩放输入和目标值的范围，这对于我们使用梯度下降算法也很有帮助。
+缩放取值可以使用 sklearn 的 MinMaxScaler 轻松地实现。
+'''
 # Scale data
 scaler = MinMaxScaler(feature_range=(-1, 1))
 scaler.fit(data_train)
 data_train = scaler.transform(data_train)
 data_test = scaler.transform(data_test)
 
+''''
+把指数和个股拆分开
+样本的特征值数为500个
+样本数为33012个
+'''
 # Build X and y
 X_train = data_train[:, 1:]
 y_train = data_train[:, 0]
@@ -46,6 +63,13 @@ y_test = data_test[:, 0]
 # Number of stocks in training data
 n_stocks = X_train.shape[1]
 
+
+''''
+该模型由四个隐藏层组成，第一层包含 1024 个神经元，然后后面三层依次以 2 的倍数减少，即 512、256 和 128 个神经元。
+后面的层级的神经元依次减少就压缩了前面层级中抽取的特征。
+当然，我们还能使用其它神经网络架构和神经元配置以更好地处理数据，例如卷积神经网络架构适合处理图像数据、循环神经网络适合处理时序数据，
+但本文只是为入门者简要地介绍如何使用全连接网络处理时序数据，所以那些复杂的架构本文并不会讨论。
+'''
 # Neurons
 n_neurons_1 = 1024
 n_neurons_2 = 512
@@ -87,9 +111,21 @@ hidden_4 = tf.nn.relu(tf.add(tf.matmul(hidden_3, W_hidden_4), bias_hidden_4))
 # Output layer (transpose!)
 out = tf.transpose(tf.add(tf.matmul(hidden_4, W_out), bias_out))
 
+''''
+损失函数
+该网络的损失函数主要是用于生成网络预测与实际观察到的训练目标之间的偏差值。
+对回归问题而言，均方误差（MSE）函数最为常用。MSE 计算预测值与目标值之间的平均平方误差。
+'''
 # Cost function
 mse = tf.reduce_mean(tf.squared_difference(out, Y))
 
+''''
+优化器
+优化器处理的是训练过程中用于适应网络权重和偏差变量的必要计算。
+这些计算调用梯度计算结果，指示训练过程中，权重和偏差需要改变的方向，从而最小化网络的代价函数。
+稳定、快速的优化器的开发，一直是神经网络和深度学习领域的重要研究。
+用到了 Adam 优化器，是目前深度学习中的默认优化器。Adam 表示适应性矩估计，可被当作 AdaGrad 和 RMSProp 这两个优化器的结合。
+'''
 # Optimizer
 opt = tf.train.AdamOptimizer().minimize(mse)
 
@@ -138,3 +174,6 @@ for e in range(epochs):
             line2.set_ydata(pred)
             plt.title('Epoch ' + str(e) + ', Batch ' + str(i))
             plt.pause(0.01)
+
+plt.ioff()
+plt.show()
